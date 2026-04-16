@@ -1,0 +1,126 @@
+# DongQiDB Text-to-SQL API - Docker Compose Configuration
+version: '3.8'
+
+services:
+  # Main API service
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dongqidb-api
+    ports:
+      - "5000:5000"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - Database__Provider=sqlite
+      - Database__Name=dongqidb
+      - Jwt__SecretKey=${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}
+      - Jwt__Issuer=DongQiDB
+      - Jwt__Audience=DongQiDB
+      - AI__ApiKey=${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY is required}
+      - Logging__LogDirectory=/app/logs
+      - Logging__ConsoleEnabled=false
+      - Logging__FileEnabled=true
+    volumes:
+      - api-data:/app/data
+      - api-logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - dongqidb-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: dongqidb-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - dongqidb-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+  # Prometheus for metrics
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: dongqidb-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - dongqidb-network
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: dongqidb-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - dongqidb-network
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+  # Seq for centralized logging
+  seq:
+    image: datalust/seq:latest
+    container_name: dongqidb-seq
+    ports:
+      - "5341:5341"
+      - "5340:80"
+    environment:
+      - ACCEPT_EULA=Y
+    volumes:
+      - seq-data:/data
+    networks:
+      - dongqidb-network
+    restart: unless-stopped
+
+networks:
+  dongqidb-network:
+    driver: bridge
+    name: dongqidb-network
+
+volumes:
+  api-data:
+    name: dongqidb-api-data
+  api-logs:
+    name: dongqidb-api-logs
+  redis-data:
+    name: dongqidb-redis-data
+  prometheus-data:
+    name: dongqidb-prometheus-data
+  grafana-data:
+    name: dongqidb-grafana-data
+  seq-data:
+    name: dongqidb-seq-data

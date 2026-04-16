@@ -1,0 +1,53 @@
+# Build results
+**/bin/
+**/obj/
+**/out/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Git
+.git/
+.gitignore
+
+# Docker
+**/Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Documentation
+**/*.md
+**/docs/
+
+# Test files
+**/tests/
+**/*Tests*/
+**/*.Tests.csproj
+**/xunit.runner.json
+**/coverage/
+
+# Logs
+**/*.log
+**/logs/
+
+# Environment
+.env
+.env.*
+appsettings.Development.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Secrets
+**/*.pfx
+**/*.pem
+**/*.key
+
+# Build artifacts
+**/*.nupkg
+**/*.zip

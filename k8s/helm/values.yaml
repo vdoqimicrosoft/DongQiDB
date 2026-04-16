@@ -1,0 +1,129 @@
+# Default values for DongQiDB Helm chart
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/dongqidb/dongqidb.api
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "5000"
+  prometheus.io/path: "/metrics"
+
+service:
+  type: ClusterIP
+  port: 5000
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+  hosts:
+    - host: dongqidb.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: dongqidb-tls
+      hosts:
+        - dongqidb.example.com
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - dongqidb
+          topologyKey: kubernetes.io/hostname
+
+# Application settings
+config:
+  database:
+    provider: sqlite
+    name: dongqidb
+  jwt:
+    issuer: DongQiDB
+    audience: DongQiDB
+  ai:
+    timeoutSeconds: 60
+    maxRetries: 3
+  logging:
+    logDirectory: /app/logs
+    consoleEnabled: false
+    fileEnabled: true
+    retainedFileCount: 30
+
+# Redis configuration
+redis:
+  enabled: true
+  host: dongqidb-redis
+  port: 6379
+
+# Monitoring
+monitoring:
+  prometheus:
+    enabled: true
+  grafana:
+    enabled: true
+  seq:
+    enabled: true
+
+# Health check
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 5000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health/ready
+    port: 5000
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1

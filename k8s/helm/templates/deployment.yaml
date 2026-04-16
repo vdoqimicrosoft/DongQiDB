@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dongqidb.fullname" . }}
+  labels:
+    {{- include "dongqidb.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "dongqidb.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- toYaml .Values.podAnnotations | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "dongqidb.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: {{ .Values.config.environment | default "Production" }}
+            - name: Database__Provider
+              value: {{ .Values.config.database.provider }}
+            - name: Database__Name
+              value: {{ .Values.config.database.name }}
+            - name: Jwt__SecretKey
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dongqidb.fullname" . }}-secrets
+                  key: jwt-secret
+            - name: Jwt__Issuer
+              value: {{ .Values.config.jwt.issuer }}
+            - name: Jwt__Audience
+              value: {{ .Values.config.jwt.audience }}
+            - name: AI__ApiKey
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dongqidb.fullname" . }}-secrets
+                  key: anthropic-api-key
+            - name: Redis__Host
+              value: {{ .Values.redis.host }}
+            - name: Redis__Port
+              value: {{ .Values.redis.port | quote }}
+          volumeMounts:
+            - name: app-data
+              mountPath: /app/data
+            - name: app-logs
+              mountPath: /app/logs
+      volumes:
+        - name: app-data
+          persistentVolumeClaim:
+            claimName: {{ include "dongqidb.fullname" . }}-data
+        - name: app-logs
+          persistentVolumeClaim:
+            claimName: {{ include "dongqidb.fullname" . }}-logs
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
