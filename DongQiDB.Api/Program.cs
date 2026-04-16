@@ -14,6 +14,8 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Prometheus;
 using Serilog;
+using Swashbuckle.AspNetCore.SwaggerGen;
+using DongQiDB.Api;
 
 var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development";
 var config = ConfigurationLoader.Build(environment);
@@ -60,16 +62,16 @@ try
             }
         });
 
-        // JWT Authentication in Swagger
+        // JWT Authentication - use query parameter for easier Swagger testing
         c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
         {
-            Description = "JWT Authorization header using the Bearer scheme. Enter 'Bearer' [space] and then your token",
-            Name = "Authorization",
-            In = ParameterLocation.Header,
-            Type = SecuritySchemeType.ApiKey,
-            Scheme = "Bearer"
+            Description = "JWT token (will be added as Bearer token)",
+            Name = "access_token",
+            In = ParameterLocation.Query,
+            Type = SecuritySchemeType.ApiKey
         });
 
+        // Make sure all endpoints require authentication by default
         c.AddSecurityRequirement(new OpenApiSecurityRequirement
         {
             {
@@ -215,15 +217,13 @@ try
     app.UseHttpMetrics();
 
     // Swagger UI
-    if (app.Environment.IsDevelopment())
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
     {
-        app.UseSwagger();
-        app.UseSwaggerUI(c =>
-        {
-            c.SwaggerEndpoint("/swagger/v1/swagger.json", "DongQiDB API V1");
-            c.RoutePrefix = "swagger";
-        });
-    }
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "DongQiDB API V1");
+        c.RoutePrefix = "swagger";
+        c.ConfigObject.AdditionalItems["persistAuthorization"] = true;
+    });
 
     // CORS
     var corsPolicy = builder.Configuration["Cors:Policy"] ?? "AllowAll";
@@ -231,6 +231,16 @@ try
 
     // Rate Limiting
     app.UseRateLimiter();
+
+    // Support token from query parameter for Swagger testing
+    app.Use(async (context, next) =>
+    {
+        if (context.Request.Query.TryGetValue("access_token", out var token) && !string.IsNullOrEmpty(token))
+        {
+            context.Request.Headers["Authorization"] = $"Bearer {token}";
+        }
+        await next();
+    });
 
     // Authentication & Authorization
     app.UseAuthentication();
